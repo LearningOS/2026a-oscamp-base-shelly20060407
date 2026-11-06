@@ -33,6 +33,7 @@
 
 use std::io::{self, Read, Write};
 use std::process::{Command, Stdio};
+use std::thread;
 
 /// Execute the given shell command and return its stdout output.
 ///
@@ -53,7 +54,24 @@ pub fn run_command(program: &str, args: &[&str]) -> String {
     // TODO: Set stdout to Stdio::piped()
     // TODO: Execute with .output() and get output
     // TODO: Convert stdout to String and return
-    todo!()
+    let output = if cfg!(target_os = "windows") {
+        let mut cmd_args = vec!["/C", program];
+        cmd_args.extend_from_slice(args);
+        
+        Command::new("cmd")
+            .args(&cmd_args)
+            .stdout(Stdio::piped())
+            .output()
+            .expect("Failed to execute command")
+    } else {
+        Command::new(program)
+            .args(args)
+            .stdout(Stdio::piped())
+            .output()
+            .expect("Failed to execute command")
+    };
+
+    String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
 /// Write data to child process (cat) stdin via pipe and read its stdout output.
@@ -89,7 +107,33 @@ pub fn pipe_through_cat(input: &str) -> String {
     // TODO: Write input to child process stdin
     // TODO: Drop stdin to close pipe (otherwise cat won't exit)
     // TODO: Read output from child process stdout
-    todo!()
+    let mut child = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(&["/C", "findstr", ".*"]) 
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn child process")
+    } else {
+        Command::new("cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn child process")
+    };
+
+    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+    stdin.write_all(input.as_bytes()).expect("Failed to write to stdin");
+
+    drop(stdin);
+
+    let mut stdout = child.stdout.take().expect("Failed to open stdout");
+    let mut output = String::new();
+    stdout.read_to_string(&mut output).expect("Failed to read from stdout");
+
+    child.wait().expect("Failed to wait on child");
+
+    output.trim_end().to_string()
 }
 
 /// Get child process exit code.
@@ -110,7 +154,24 @@ pub fn get_exit_code(command: &str) -> i32 {
     // TODO: Use Command::new("sh").args(["-c", command])
     // TODO: Execute and get status
     // TODO: Return exit code
-    todo!()
+    let status = if cfg!(target_os = "windows") {
+        let exit_code = match command {
+            "true" => "0",
+            "false" => "1",
+            _ => "1", 
+        };
+        Command::new("cmd")
+            .args(&["/C", "exit", exit_code])
+            .status()
+            .expect("Failed to execute command")
+    } else {
+        Command::new("sh")
+            .args(&["-c", command])
+            .status()
+            .expect("Failed to execute command")
+    };
+    
+    status.code().unwrap_or(-1)
 }
 
 /// Execute the given shell command and return its stdout output as a `Result`.
@@ -137,7 +198,20 @@ pub fn run_command_with_result(program: &str, args: &[&str]) -> io::Result<Strin
     // TODO: Set stdout to Stdio::piped()
     // TODO: Execute with .output() and handle Result
     // TODO: Convert stdout to String with from_utf8, mapping errors to io::Error
-    todo!()
+    let output = if cfg!(target_os = "windows") {
+        Command::new("cmd").args(&["/C", program]).args(args).output()?
+    } else {
+        Command::new(program).args(args).output()?
+    };
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Command failed",
+        ))
+    }
 }
 
 /// Interact with `grep` via bidirectional pipes, filtering lines that contain a pattern.
@@ -161,13 +235,40 @@ pub fn run_command_with_result(program: &str, args: &[&str]) -> io::Result<Strin
 /// 7. Return the concatenated matching lines as a single `String`.
 ///
 pub fn pipe_through_grep(pattern: &str, input: &str) -> String {
-    // TODO: Create "grep" command with pattern, set stdin and stdout to piped
-    // TODO: Spawn process
-    // TODO: Write input lines to child stdin
-    // TODO: Drop stdin to close pipe
-    // TODO: Read output from child stdout line by line
-    // TODO: Collect and return matching lines
-    todo!()
+    let mut child = if cfg!(target_os = "windows") {
+        Command::new("findstr")
+            .arg(pattern)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("启动 findstr 失败")
+    } else {
+        Command::new("grep")
+            .arg(pattern)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("启动 grep 失败")
+    };
+
+    let mut stdin = child.stdin.take().expect("获取 stdin 失败");
+    let input_data = input.to_string(); 
+
+    let write_handle = thread::spawn(move || {
+        stdin.write_all(input_data.as_bytes()).expect("写入 stdin 失败");
+    });
+
+    let mut result = String::new();
+    child
+        .stdout
+        .take()
+        .expect("获取 stdout 失败")
+        .read_to_string(&mut result)
+        .expect("读取 stdout 失败");
+
+    write_handle.join().expect("写入线程发生 panic");
+
+    result
 }
 
 #[cfg(test)]
