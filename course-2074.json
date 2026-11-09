@@ -2,8 +2,8 @@
   "schema": 1,
   "courseId": 2074,
   "repository": "LearningOS/2026a-oscamp-base-shelly20060407",
-  "commit": "4dda93a20bff5aa11ef587d9f4239b89a1b857c8",
-  "score": 29,
+  "commit": "caa5cc9fb4779cf393ccf454c3aec6922d853085",
+  "score": 39,
   "totalScore": 100,
   "exercises": [
     {
@@ -58,16 +58,16 @@
     {
       "name": "syscall_wrapper",
       "max": 5,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 5,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "fd_table",
       "max": 5,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 5,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "atomic_counter",
@@ -176,9 +176,9 @@
     }
   ],
   "student": "shelly20060407",
-  "runId": "42178041428",
+  "runId": "42558692791",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
