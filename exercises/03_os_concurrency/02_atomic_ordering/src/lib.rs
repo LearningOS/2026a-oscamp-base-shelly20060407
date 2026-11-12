@@ -12,6 +12,13 @@
 //! ## Release-Acquire Pairing
 //! When thread A writes with Release, and thread B reads the same location with Acquire,
 //! thread B will see all writes that thread A performed before the Release.
+//! 
+//! Ordering	语义	能用在哪
+//! Relaxed	只保证原子性，不建立跨线程顺序	所有原子操作
+//! Acquire	之后的读写不能上移到它前面	load、RMW
+//! Release	之前的读写不能下移到它后面	store、RMW
+//! AcqRel	Acquire + Release	只能用于 RMW（如 fetch_add、CAS 成功）
+//! SeqCst	在 Acquire/Release 基础上再加全局唯一顺序	所有操作
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -40,7 +47,8 @@ impl FlagChannel {
     pub fn produce(&self, value: u32) {
         // TODO: Store data (choose appropriate Ordering)
         // TODO: Set ready = true (choose appropriate Ordering so data writes complete before this)
-        todo!()
+        self.data.store(value,Ordering::Relaxed);
+        self.ready.store(true,Ordering::Release);
     }
 
     /// Consumer: spin-wait for ready flag, then read data.
@@ -51,7 +59,10 @@ impl FlagChannel {
     pub fn consume(&self) -> u32 {
         // TODO: Spin-wait for ready to become true (choose appropriate Ordering)
         // TODO: Read data (choose appropriate Ordering)
-        todo!()
+        while !self.ready.load(Ordering::Acquire) {
+            core::hint::spin_loop();
+        }
+        self.data.load(Ordering::Relaxed)
     }
 
     /// Reset channel state
@@ -83,13 +94,27 @@ impl OnceCell {
     pub fn init(&self, val: u32) -> bool {
         // TODO: Use compare_exchange to ensure initialization only once
         // Store value on success
-        todo!()
+        match self.initialized.compare_exchange(
+            false, 
+            true, 
+            Ordering::SeqCst, 
+            Ordering::SeqCst){
+            Ok(_) => {
+                self.value.store(val,Ordering::SeqCst);
+                true
+            }
+            Err(_) => false
+        }
     }
 
     /// Get value. Returns Some if initialized, otherwise None.
     pub fn get(&self) -> Option<u32> {
         // TODO: Check initialized flag, then read value
-        todo!()
+        if self.initialized.load(Ordering::SeqCst) {
+            Some(self.value.load(Ordering::SeqCst))
+        }else{
+            None
+        }
     }
 }
 
