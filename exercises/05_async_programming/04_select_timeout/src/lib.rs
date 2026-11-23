@@ -19,9 +19,17 @@ pub async fn with_timeout<F, T>(future: F, timeout_ms: u64) -> Option<T>
 where
     F: Future<Output = T>,
 {
-    // TODO: Use tokio::select! to race between future and sleep
-    // Or use tokio::time::timeout
-    todo!()
+    // tokio::pin! 是宏：把 future 固定在栈上，得到 Pin<&mut F>。
+    // select! 需要先 pin 住才能反复 poll 同一个 Future。
+    tokio::pin!(future);
+
+    // select! 是宏：同时等待多个分支，谁先完成就执行谁的分支，其余分支被取消
+    tokio::select! {
+        // future 先完成：拿到结果
+        value = &mut future => Some(value),
+        // 超时分支先完成：返回 None
+        _ = sleep(Duration::from_millis(timeout_ms)) => None,
+    }
 }
 
 /// Race two async tasks, return the result of whichever finishes first.
@@ -32,9 +40,15 @@ where
     F1: Future<Output = T>,
     F2: Future<Output = T>,
 {
-    // TODO: Use tokio::select! to wait for f1 and f2
-    // Return the result of whichever completes first
-    todo!()
+    // 两个 Future 都要先 pin 住，select! 才能 poll 它们
+    tokio::pin!(f1);
+    tokio::pin!(f2);
+
+    tokio::select! {
+        // 两个分支返回类型相同（都是 T），谁先完成就用谁的结果
+        value = &mut f1 => value,
+        value = &mut f2 => value,
+    }
 }
 
 #[cfg(test)]

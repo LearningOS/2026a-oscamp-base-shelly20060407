@@ -14,10 +14,23 @@ use tokio::time::{sleep, Duration};
 ///
 /// Hint: Create `tokio::spawn` task for each i, collect JoinHandle, await them sequentially.
 pub async fn concurrent_squares(n: usize) -> Vec<usize> {
-    // TODO: Create n asynchronous tasks, each computing i * i
-    // TODO: Collect all JoinHandle
-    // TODO: Await each one to get result
-    todo!()
+    // 先收集所有任务的 JoinHandle，此时任务已经在后台运行
+    let mut handles: Vec<JoinHandle<usize>> = Vec::new();
+
+    for i in 0..n {
+        // async move 把 i 的所有权移进任务，避免借用外部变量
+        handles.push(tokio::spawn(async move { i * i }));
+    }
+
+    // 再按创建顺序依次等待，结果顺序与 i 的顺序一致
+    let mut results = Vec::new();
+    for handle in handles {
+        // JoinHandle 的 await 返回 Result；unwrap 取出成功的结果
+        let value = handle.await.unwrap();
+        results.push(value);
+    }
+
+    results
 }
 
 /// Concurrently execute multiple "time-consuming" tasks (simulated with sleep), return all results.
@@ -25,10 +38,24 @@ pub async fn concurrent_squares(n: usize) -> Vec<usize> {
 ///
 /// Key: All tasks should execute concurrently, total duration should be close to single task duration, not sum of all tasks.
 pub async fn parallel_sleep_tasks(n: usize, duration_ms: u64) -> Vec<usize> {
-    // TODO: Create asynchronous task for each id in 0..n
-    // TODO: Each task sleeps specified duration and returns its own id
-    // TODO: Collect all results and sort
-    todo!()
+    let mut handles: Vec<JoinHandle<usize>> = Vec::new();
+
+    for id in 0..n {
+        // 每个任务各自 sleep 同样的时长；它们是并发执行的，不是排队执行
+        handles.push(tokio::spawn(async move {
+            sleep(Duration::from_millis(duration_ms)).await;
+            id
+        }));
+    }
+
+    let mut results = Vec::new();
+    for handle in handles {
+        results.push(handle.await.unwrap());
+    }
+
+    // 任务完成顺序不确定，排序后返回
+    results.sort();
+    results
 }
 
 #[cfg(test)]

@@ -15,23 +15,52 @@ use tokio::sync::mpsc;
 ///
 /// Hint: Set channel capacity to items.len().max(1)
 pub async fn producer_consumer(items: Vec<String>) -> Vec<String> {
-    // TODO: Create channel with mpsc::channel
-    // TODO: Spawn producer task: iterate through items, send each one
-    // TODO: Spawn consumer task: loop recv until channel closes, collect results
-    // TODO: Wait for consumer to complete and return results
-    todo!()
+    // mpsc::channel(容量)：容量必须大于 0，空输入时用 1
+    let (tx, mut rx) = mpsc::channel(items.len().max(1));
+
+    // 生产者放进独立任务，items 被移动进去
+    tokio::spawn(async move {
+        for item in items {
+            // send 是异步的：通道满时会在这里等待
+            tx.send(item).await.unwrap();
+        }
+        // tx 在任务结束时被 drop，通道随之关闭
+    });
+
+    // 消费者在当前任务里：recv 返回 None 表示所有发送端都已 drop
+    let mut result = Vec::new();
+    while let Some(item) = rx.recv().await {
+        result.push(item);
+    }
+
+    result
 }
 
 /// Fan‑in pattern: multiple producers, one consumer.
 /// Create `n_producers` producers, each sending `"producer {id}: message"`.
 /// Consumer collects all messages, sorts them, and returns.
 pub async fn fan_in(n_producers: usize) -> Vec<String> {
-    // TODO: Create mpsc channel
-    // TODO: Spawn n_producers producer tasks
-    //       Each sends format!("producer {id}: message")
-    // TODO: Drop the original sender (important! otherwise channel won't close)
-    // TODO: Consumer loops receiving, collects and sorts
-    todo!()
+    let (tx, mut rx) = mpsc::channel(n_producers.max(1));
+
+    for id in 0..n_producers {
+        // 每个生产者拿一份发送端的克隆
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let msg = format!("producer {id}: message");
+            tx.send(msg).await.unwrap();
+        });
+    }
+
+    // 必须丢弃原始发送端：只要还有一个 tx 活着，rx.recv() 就不会返回 None
+    drop(tx);
+
+    let mut result = Vec::new();
+    while let Some(msg) = rx.recv().await {
+        result.push(msg);
+    }
+
+    result.sort();
+    result
 }
 
 #[cfg(test)]
